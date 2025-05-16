@@ -1,0 +1,453 @@
+{% extends "layout.html" %}
+
+{% block head %}
+<title>Download Media - Telegram Manager</title>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="mb-4">Download Media dai Gruppi</h1>
+        
+        <!-- Card avvio download -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cloud-download"></i> Avvia Nuovo Download</h5>
+            </div>
+            <div class="card-body">
+                <form id="startDownloadForm" class="row g-3">
+                    <div class="col-md-6">
+                        <label for="downloadUserSelect" class="form-label">Utente</label>
+                        <select class="form-select" id="downloadUserSelect" required>
+                            <option value="">Seleziona utente</option>
+                            {% for user in users %}
+                                <option value="{{ user.phone }}">{{ user.first_name }} {{ user.last_name|default("") }} ({{ user.phone }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="downloadGroupSelect" class="form-label">Gruppo</label>
+                        <select class="form-select" id="downloadGroupSelect" disabled>
+                            <option value="">Seleziona prima un utente</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label class="form-label">Tipi di media da scaricare</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="downloadPhoto" checked>
+                            <label class="form-check-label" for="downloadPhoto">
+                                <i class="bi bi-image"></i> Immagini
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="downloadVideo" checked>
+                            <label class="form-check-label" for="downloadVideo">
+                                <i class="bi bi-film"></i> Video
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="downloadMessages" checked>
+                            <label class="form-check-label" for="downloadMessages">
+                                <i class="bi bi-chat-text"></i> Messaggi
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="downloadLimit" class="form-label">Limite messaggi da scaricare</label>
+                        <input type="number" class="form-control" id="downloadLimit" value="100" min="1">
+                        <small class="form-text text-muted">Un valore alto potrebbe richiedere molto tempo</small>
+                    </div>
+                    
+                    <input type="hidden" id="downloadUserPhone" value="">
+                    
+                    <div class="col-12">
+                        <button type="button" class="btn btn-primary btn-start-download" disabled>
+                            <i class="bi bi-cloud-download"></i> Avvia download
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Downloads in corso -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Download in Corso</h5>
+            </div>
+            <div class="card-body">
+                <div id="downloadsContainer">
+                    {% if downloads %}
+                        {% for task_id, download in downloads.items() %}
+                            <div class="download-item card mb-3" data-task-id="{{ task_id }}">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-cloud-download"></i> Download: {{ download.group_name }}
+                                    </h5>
+                                    <span class="badge {{ 'bg-success' if download.status == 'completed' else 'bg-danger' if download.status == 'error' else 'bg-primary' }}">
+                                        {{ 'Completato' if download.status == 'completed' else 'Errore' if download.status == 'error' else 'In corso' }}
+                                    </span>
+                                </div>
+                                <div class="card-body">
+                                    <p>Utente: {{ download.user_phone }}</p>
+                                    <p>Avviato: {{ download.start_time|format_datetime }}</p>
+                                    <div class="progress">
+                                        <div class="progress-bar {{ 'bg-success' if download.status == 'completed' else 'bg-danger' if download.status == 'error' else 'progress-bar-striped progress-bar-animated' }}" 
+                                             role="progressbar" style="width: {{ download.progress }}%" 
+                                             aria-valuenow="{{ download.progress }}" aria-valuemin="0" aria-valuemax="100">{{ download.progress }}%</div>
+                                    </div>
+                                    <p class="text-center mt-1">{{ download.downloaded_media }}/{{ download.total_media }} media {{ 'scaricati' if download.status == 'completed' else 'scaricati finora' }}</p>
+                                    
+                                    {% if download.status == 'completed' %}
+                                        <div class="d-grid gap-2 mt-3">
+                                            <a href="/download/{{ download.group_dir_name }}" class="btn btn-sm btn-success" target="_blank">
+                                                <i class="bi bi-folder"></i> Apri cartella download
+                                            </a>
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if download.status == 'error' %}
+                                        <div class="alert alert-danger mt-3">
+                                            <i class="bi bi-exclamation-triangle"></i> {{ download.error|default("Si è verificato un errore durante il download") }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Nessun download in corso. Avvia un nuovo download utilizzando il form qui sopra.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Download completati -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-check-circle"></i> Download Completati</h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshCompletedBtn">
+                    <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="completedDownloadsContainer">
+                    <div class="spinner-container">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Caricamento...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Script specifici per la pagina download
+    document.addEventListener("DOMContentLoaded", function() {
+        // Ottieni elementi principali
+        const userSelect = document.getElementById('downloadUserSelect');
+        const groupSelect = document.getElementById('downloadGroupSelect');
+        const userPhoneInput = document.getElementById('downloadUserPhone');
+        const startDownloadBtn = document.querySelector('.btn-start-download');
+        
+        // Aggiungi event listener per cambio utente
+        if (userSelect) {
+            userSelect.addEventListener('change', function() {
+                const selectedUser = this.value;
+                userPhoneInput.value = selectedUser;
+                
+                if (selectedUser) {
+                    // Abilita la select dei gruppi e aggiorna
+                    groupSelect.disabled = true;
+                    groupSelect.innerHTML = '<option value="">Caricamento gruppi...</option>';
+                    
+                    // Carica gruppi dell'utente
+                    loadUserGroupsForDownload(selectedUser);
+                } else {
+                    // Disabilita la select dei gruppi
+                    groupSelect.disabled = true;
+                    groupSelect.innerHTML = '<option value="">Seleziona prima un utente</option>';
+                    
+                    // Disabilita pulsante avvio
+                    startDownloadBtn.disabled = true;
+                }
+            });
+        }
+        
+        // Aggiungi event listener per cambio gruppo
+        if (groupSelect) {
+            groupSelect.addEventListener('change', function() {
+                const selectedGroup = this.value;
+                
+                // Abilita/disabilita pulsante avvio in base alla selezione
+                startDownloadBtn.disabled = !selectedGroup;
+            });
+        }
+        
+        // Aggiungi event listener per pulsante avvio download
+        if (startDownloadBtn) {
+            startDownloadBtn.addEventListener('click', function() {
+                // Ottieni utente selezionato
+                const userPhone = userPhoneInput.value;
+                
+                // Ottieni gruppo selezionato
+                const groupId = groupSelect.value;
+                
+                if (!userPhone) {
+                    showNotification('Errore', 'Seleziona un utente per il download', 'danger');
+                    return;
+                }
+                
+                if (!groupId) {
+                    showNotification('Errore', 'Seleziona un gruppo da cui scaricare i media', 'danger');
+                    return;
+                }
+                
+                // Ottieni tipi di media selezionati
+                const mediaTypes = [];
+                if (document.getElementById('downloadPhoto').checked) mediaTypes.push('photo');
+                if (document.getElementById('downloadVideo').checked) mediaTypes.push('video');
+                
+                if (mediaTypes.length === 0) {
+                    showNotification('Errore', 'Seleziona almeno un tipo di media da scaricare', 'danger');
+                    return;
+                }
+                
+                // Ottieni limite messaggi
+                const limit = parseInt(document.getElementById('downloadLimit').value) || 100;
+                
+                // Avvia download
+                startDownload(groupId, mediaTypes, limit);
+            });
+        }
+        
+        // Carica download completati
+        loadCompletedDownloads();
+        
+        // Aggiungi event listener per pulsante aggiorna download completati
+        const refreshCompletedBtn = document.getElementById('refreshCompletedBtn');
+        if (refreshCompletedBtn) {
+            refreshCompletedBtn.addEventListener('click', loadCompletedDownloads);
+        }
+        
+        // Inizializza Socket.IO per aggiornamenti in tempo reale
+        initRealtimeUpdates();
+    });
+    
+    // Carica gruppi di un utente per il download
+    function loadUserGroupsForDownload(userPhone) {
+        const groupSelect = document.getElementById('downloadGroupSelect');
+        const startDownloadBtn = document.querySelector('.btn-start-download');
+        
+        // Esegui richiesta API
+        fetch(`/api/groups/${userPhone}`)
+            .then(response => response.json())
+            .then(groups => {
+                // Aggiorna select dei gruppi
+                groupSelect.innerHTML = '<option value="">Seleziona gruppo</option>';
+                
+                if (groups.length === 0) {
+                    groupSelect.innerHTML += '<option value="" disabled>Nessun gruppo trovato</option>';
+                    groupSelect.disabled = true;
+                    startDownloadBtn.disabled = true;
+                } else {
+                    // Aggiungi opzioni per i gruppi
+                    groups.forEach(group => {
+                        const option = document.createElement('option');
+                        option.value = group.id;
+                        option.textContent = group.title;
+                        groupSelect.appendChild(option);
+                    });
+                    
+                    // Abilita la select
+                    groupSelect.disabled = false;
+                    
+                    // Il pulsante rimane disabilitato finché non viene selezionato un gruppo
+                    startDownloadBtn.disabled = true;
+                }
+            })
+            .catch(error => {
+                console.error('Errore nel caricamento dei gruppi:', error);
+                
+                // Mostra errore nella select
+                groupSelect.innerHTML = '<option value="">Errore nel caricamento dei gruppi</option>';
+                groupSelect.disabled = true;
+                startDownloadBtn.disabled = true;
+                
+                // Mostra notifica
+                showNotification('Errore', 'Si è verificato un errore durante il caricamento dei gruppi', 'danger');
+            });
+    }
+    
+    // Carica download completati
+    function loadCompletedDownloads() {
+        const completedContainer = document.getElementById('completedDownloadsContainer');
+        
+        if (completedContainer) {
+            // Mostra spinner
+            completedContainer.innerHTML = `
+                <div class="spinner-container">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Caricamento...</span>
+                    </div>
+                </div>
+            `;
+            
+            // Esegui richiesta API
+            fetch('/api/download/completed')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const downloads = data.downloads;
+                        
+                        if (downloads.length === 0) {
+                            completedContainer.innerHTML = `
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> Nessun download completato.
+                                </div>
+                            `;
+                        } else {
+                            completedContainer.innerHTML = '';
+                            
+                            // Crea tabella con download completati
+                            const table = document.createElement('div');
+                            table.className = 'table-responsive';
+                            table.innerHTML = `
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Gruppo</th>
+                                            <th>Utente</th>
+                                            <th>Data</th>
+                                            <th>Media</th>
+                                            <th>Dimensione</th>
+                                            <th>Azioni</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${downloads.map(download => `
+                                            <tr>
+                                                <td>${download.group_name}</td>
+                                                <td>${download.user_phone}</td>
+                                                <td>${new Date(download.completion_time).toLocaleString()}</td>
+                                                <td>${download.media_count} (${download.images_count} img, ${download.videos_count} vid)</td>
+                                                <td>${download.size_formatted}</td>
+                                                <td>
+                                                    <div class="btn-group">
+                                                        <a href="/download/${download.group_dir_name}" class="btn btn-sm btn-primary" target="_blank">
+                                                            <i class="bi bi-folder"></i> Apri
+                                                        </a>
+                                                        <button type="button" class="btn btn-sm btn-danger btn-delete-download" data-download-id="${download.id}">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            `;
+                            
+                            completedContainer.appendChild(table);
+                            
+                            // Aggiungi event listener per pulsanti elimina
+                            document.querySelectorAll('.btn-delete-download').forEach(btn => {
+                                btn.addEventListener('click', function() {
+                                    const downloadId = this.dataset.downloadId;
+                                    deleteDownload(downloadId);
+                                });
+                            });
+                        }
+                    } else {
+                        completedContainer.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i> Errore nel caricamento dei download completati.
+                                ${data.error || ''}
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore nel caricamento dei download completati:', error);
+                    
+                    completedContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Si è verificato un errore durante il caricamento dei download completati.
+                        </div>
+                    `;
+                });
+        }
+    }
+    
+    // Elimina un download completato
+    function deleteDownload(downloadId) {
+        // Chiedi conferma
+        showConfirmationModal(
+            'Elimina download',
+            'Sei sicuro di voler eliminare questo download? Tutti i file scaricati verranno eliminati definitivamente.',
+            () => {
+                // Esegui richiesta API
+                fetch(`/api/download/${downloadId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification('Successo', 'Download eliminato con successo', 'success');
+                        
+                        // Aggiorna lista download completati
+                        loadCompletedDownloads();
+                    } else {
+                        showNotification('Errore', data.message || 'Errore nell\'eliminazione del download', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore nell\'eliminazione del download:', error);
+                    showNotification('Errore', 'Si è verificato un errore durante l\'eliminazione del download', 'danger');
+                });
+            }
+        );
+    }
+    
+    // Inizializza aggiornamenti in tempo reale
+    function initRealtimeUpdates() {
+        // Gestisci evento di avvio download
+        window.socket.on('download_started', function(data) {
+            console.log('Download avviato:', data);
+            updateDownloadStatus(data);
+        });
+        
+        // Gestisci evento di progresso download
+        window.socket.on('download_progress', function(data) {
+            console.log('Progresso download:', data);
+            updateDownloadProgress(data);
+        });
+        
+        // Gestisci evento di completamento download
+        window.socket.on('download_completed', function(data) {
+            console.log('Download completato:', data);
+            updateDownloadStatus(data, 'completed');
+            
+            // Aggiorna lista download completati
+            setTimeout(loadCompletedDownloads, 1000);
+        });
+        
+        // Gestisci evento di errore download
+        window.socket.on('download_error', function(data) {
+            console.error('Errore download:', data);
+            updateDownloadStatus(data, 'error');
+        });
+    }
+</script>
+{% endblock %}

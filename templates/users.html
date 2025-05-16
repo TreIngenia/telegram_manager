@@ -1,0 +1,111 @@
+{% extends "layout.html" %}
+
+{% block head %}
+<title>Gestione Utenti - Telegram Manager</title>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="mb-4">Gestione Utenti Telegram</h1>
+        
+        <!-- Card Aggiungi Utente -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person-plus"></i> Aggiungi Nuovo Utente</h5>
+            </div>
+            <div class="card-body">
+                <form id="addUserForm" class="row g-3">
+                    <div class="col-md-6">
+                        <label for="newUserPhone" class="form-label">Numero di telefono</label>
+                        <div class="input-group">
+                            <span class="input-group-text">+</span>
+                            <input type="text" class="form-control" id="newUserPhone" placeholder="39xxxxxxxxxx" required>
+                        </div>
+                        <small class="form-text text-muted">Inserisci il numero di telefono con prefisso nazionale senza il simbolo +</small>
+                    </div>
+                    <div class="col-12">
+                        <button type="button" class="btn btn-primary" id="addUserBtn">
+                            <i class="bi bi-person-plus"></i> Aggiungi utente
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Lista Utenti -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-people"></i> Utenti Registrati</h5>
+            </div>
+            <div class="card-body">
+                <div id="usersContainer">
+                    {% if users %}
+                        <div class="row">
+                            {% for user in users %}
+                                <div class="col-md-4 mb-3">
+                                    <div class="card user-card" data-phone="{{ user.phone }}">
+                                        <div class="card-header d-flex align-items-center">
+                                            <div class="user-avatar">
+                                                <i class="bi bi-person"></i>
+                                            </div>
+                                            <h5 class="card-title mb-0">{{ user.first_name }} {{ user.last_name|default("") }}</h5>
+                                            <div class="user-status {{ 'online' if user.connected else 'offline' }}"></div>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="card-text">
+                                                <i class="bi bi-phone"></i> {{ user.phone }}<br>
+                                                <i class="bi bi-person-badge"></i> {{ user.username|default("N/D") }}<br>
+                                                <i class="bi bi-calendar3"></i> Registrato: {{ user.session_created|format_datetime if user.session_created else "N/D" }}
+                                            </p>
+                                            <div class="d-grid gap-2">
+                                                <a href="{{ url_for('groups', user=user.phone) }}" class="btn btn-sm btn-info">
+                                                    <i class="bi bi-chat-left-text"></i> Gruppi
+                                                </a>
+                                                <button type="button" class="btn btn-sm btn-danger btn-remove-user" data-phone="{{ user.phone }}">
+                                                    <i class="bi bi-person-x"></i> Rimuovi
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">Nessun utente registrato</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Script specifici per la pagina utenti
+    document.addEventListener("DOMContentLoaded", function() {
+        // Gestisci l'invio del form di aggiunta utente
+        const addUserForm = document.getElementById('addUserForm');
+        if (addUserForm) {
+            addUserForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                addUser();
+            });
+        }
+        
+        // Aggiungi event listener per pulsanti rimuovi utente
+        const removeUserBtns = document.querySelectorAll('.btn-remove-user');
+        removeUserBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const phone = this.dataset.phone;
+                showConfirmationModal(
+                    'Rimuovere utente',
+                    `Sei sicuro di voler rimuovere l'utente ${phone}?`,
+                    () => removeUser(phone)
+                );
+            });
+        });
+    });
+</script>
+{% endblock %}

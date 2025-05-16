@@ -1,0 +1,365 @@
+{% extends "layout.html" %}
+
+{% block head %}
+<title>Dashboard - Telegram Manager</title>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="mb-4">Dashboard</h1>
+        
+        <!-- Contatori principali -->
+        <div class="row">
+            <div class="col-md-4 col-xl-2 mb-4">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <h1 class="display-4" id="usersCount">{{ users|length }}</h1>
+                        <p class="text-muted">Utenti</p>
+                    </div>
+                    <div class="card-footer bg-primary text-white">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 col-xl-2 mb-4">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <h1 class="display-4" id="groupsCount">{{ groups_count|default("0") }}</h1>
+                        <p class="text-muted">Gruppi</p>
+                    </div>
+                    <div class="card-footer bg-info text-white">
+                        <i class="bi bi-chat-left-text"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 col-xl-2 mb-4">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <h1 class="display-4" id="monitorCount">{{ monitored|length }}</h1>
+                        <p class="text-muted">Monitoraggi</p>
+                    </div>
+                    <div class="card-footer bg-success text-white">
+                        <i class="bi bi-broadcast"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 col-xl-2 mb-4">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <h1 class="display-4" id="downloadCount">{{ downloads|length }}</h1>
+                        <p class="text-muted">Download</p>
+                    </div>
+                    <div class="card-footer bg-warning text-white">
+                        <i class="bi bi-cloud-download"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 col-xl-2 mb-4">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <h1 class="display-4" id="archiveCount">{{ archives|length }}</h1>
+                        <p class="text-muted">Archivi</p>
+                    </div>
+                    <div class="card-footer bg-secondary text-white">
+                        <i class="bi bi-archive"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 col-xl-2 mb-4">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <h1 class="display-4" id="totalMedia">{{ total_media|default("0") }}</h1>
+                        <p class="text-muted">Media Totali</p>
+                    </div>
+                    <div class="card-footer bg-dark text-white">
+                        <i class="bi bi-image"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Statistiche media -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Statistiche Media</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Quantità</th>
+                                <th>Percentuale</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><i class="bi bi-image"></i> Immagini</td>
+                                <td id="totalImages">{{ total_images|default("0") }}</td>
+                                <td>
+                                    {% if total_media > 0 %}
+                                    <div class="progress">
+                                        <div class="progress-bar bg-primary" role="progressbar" 
+                                             style="width: {{ (total_images / total_media * 100)|round }}%" 
+                                             aria-valuenow="{{ (total_images / total_media * 100)|round }}" 
+                                             aria-valuemin="0" aria-valuemax="100">
+                                            {{ (total_images / total_media * 100)|round }}%
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <div class="progress">
+                                        <div class="progress-bar bg-primary" role="progressbar" 
+                                             style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                            0%
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><i class="bi bi-film"></i> Video</td>
+                                <td id="totalVideos">{{ total_videos|default("0") }}</td>
+                                <td>
+                                    {% if total_media > 0 %}
+                                    <div class="progress">
+                                        <div class="progress-bar bg-danger" role="progressbar" 
+                                             style="width: {{ (total_videos / total_media * 100)|round }}%" 
+                                             aria-valuenow="{{ (total_videos / total_media * 100)|round }}" 
+                                             aria-valuemin="0" aria-valuemax="100">
+                                            {{ (total_videos / total_media * 100)|round }}%
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <div class="progress">
+                                        <div class="progress-bar bg-danger" role="progressbar" 
+                                             style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                            0%
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-light">
+                                <th colspan="2">Spazio Totale Occupato:</th>
+                                <td id="totalSize">{{ total_size_formatted|default("0 B") }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Attività recenti -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-activity"></i> Attività Recenti</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% if recent_activities %}
+                        {% for activity in recent_activities %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ activity.title }}</h6>
+                                <small>{{ activity.time }}</small>
+                            </div>
+                            <p class="mb-1">{{ activity.description }}</p>
+                            <small>{{ activity.user }}</small>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-info">Nessuna attività recente</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Utenti attivi -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-people"></i> Utenti Attivi</h5>
+                <a href="{{ url_for('users') }}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-arrow-right"></i> Gestisci
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="activeUsersContainer">
+                    {% if users %}
+                        <div class="row">
+                        {% for user in users %}
+                            <div class="col-md-6 mb-3">
+                                <div class="card user-card">
+                                    <div class="card-header d-flex align-items-center">
+                                        <div class="user-avatar">
+                                            <i class="bi bi-person"></i>
+                                        </div>
+                                        <h5 class="card-title mb-0">{{ user.first_name }} {{ user.last_name|default("") }}</h5>
+                                        <div class="user-status {{ 'online' if user.connected else 'offline' }}"></div>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="card-text">
+                                            <i class="bi bi-phone"></i> {{ user.phone }}<br>
+                                            <i class="bi bi-person-badge"></i> {{ user.username|default("N/D") }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">Nessun utente attivo</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Monitoraggi attivi -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-broadcast"></i> Monitoraggi Attivi</h5>
+                <a href="{{ url_for('monitor') }}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-arrow-right"></i> Gestisci
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="activeMonitorsContainer">
+                    {% if monitored %}
+                        {% for user_phone, group_ids in monitored.items() %}
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-broadcast"></i> {{ user_phone }}
+                                </h5>
+                                <button class="btn btn-sm btn-danger btn-stop-monitor" data-user="{{ user_phone }}">
+                                    <i class="bi bi-stop-circle"></i> Stop
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <p>Gruppi monitorati: {{ group_ids|length }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-info">Nessun monitoraggio attivo</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Download in corso -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-cloud-download"></i> Download in Corso</h5>
+                <a href="{{ url_for('download') }}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-arrow-right"></i> Gestisci
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="activeDownloadsContainer">
+                    {% if downloads %}
+                        {% for task_id, download in downloads.items() %}
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-cloud-download"></i> {{ download.group_name }}
+                                </h5>
+                                <span class="badge {{ 'bg-success' if download.status == 'completed' else 'bg-danger' if download.status == 'error' else 'bg-primary' }}">
+                                    {{ 'Completato' if download.status == 'completed' else 'Errore' if download.status == 'error' else 'In corso' }}
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <p>Utente: {{ download.user_phone }}</p>
+                                <p>Avviato: {{ download.start_time|default(download.timestamp)|format_datetime }}</p>
+                                <div class="progress">
+                                    <div class="progress-bar {{ 'bg-success' if download.status == 'completed' else 'bg-danger' if download.status == 'error' else 'progress-bar-striped progress-bar-animated' }}" 
+                                         role="progressbar" style="width: {{ download.progress }}%" 
+                                         aria-valuenow="{{ download.progress }}" aria-valuemin="0" aria-valuemax="100">{{ download.progress }}%</div>
+                                </div>
+                                <p class="text-center mt-1">{{ download.downloaded_media|default(0) }}/{{ download.total_media|default(0) }} media {{ 'scaricati' if download.status == 'completed' else 'scaricati finora' }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-info">Nessun download in corso</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Archivi recenti -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-archive"></i> Archivi Recenti</h5>
+                <a href="{{ url_for('archive') }}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-arrow-right"></i> Gestisci
+                </a>
+            </div>
+            <div class="card-body">
+                <div id="recentArchivesContainer">
+                    {% if archives %}
+                        {% for archive in archives %}
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-archive"></i> {{ archive.group_name }}
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <p>Creato: {{ archive.creation_date|format_datetime }}</p>
+                                <p>Media: {{ archive.total_media }} ({{ archive.images_count }} immagini, {{ archive.videos_count }} video)</p>
+                                <p>Dimensione: {{ archive.total_size_formatted }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-info">Nessun archivio recente</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Script specifici per la pagina dashboard
+    document.addEventListener("DOMContentLoaded", function() {
+        // Aggiungi event listener per i pulsanti di stop del monitoraggio
+        const stopMonitorBtns = document.querySelectorAll('.btn-stop-monitor');
+        stopMonitorBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const userPhone = this.dataset.user;
+                stopMonitoring(userPhone);
+            });
+        });
+    });
+</script>
+{% endblock %}

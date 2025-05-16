@@ -1,0 +1,501 @@
+{% extends "layout.html" %}
+
+{% block head %}
+<title>Gestione Gruppi - Telegram Manager</title>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="mb-4">Gestione Gruppi Telegram</h1>
+        
+        <!-- Seleziona utente -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person"></i> Seleziona Utente</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if users %}
+                        {% for user in users %}
+                            <div class="col-md-3 mb-3">
+                                <div class="card user-card {{ 'selected' if user.phone == selected_user else '' }}" data-phone="{{ user.phone }}">
+                                    <div class="card-header d-flex align-items-center">
+                                        <div class="user-avatar">
+                                            <i class="bi bi-person"></i>
+                                        </div>
+                                        <h5 class="card-title mb-0">{{ user.first_name }}</h5>
+                                        <div class="user-status {{ 'online' if user.connected else 'offline' }}"></div>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="card-text">
+                                            <i class="bi bi-phone"></i> {{ user.phone }}
+                                        </p>
+                                        <div class="d-grid">
+                                            <a href="{{ url_for('groups', user=user.phone) }}" class="btn btn-sm btn-primary">
+                                                <i class="bi bi-chat-left-text"></i> Mostra gruppi
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="col-12">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i> Nessun utente registrato.
+                                <a href="{{ url_for('users') }}" class="alert-link">Aggiungi un utente</a> per visualizzare i gruppi.
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Lista Gruppi -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-chat-left-text"></i> Gruppi disponibili</h5>
+                {% if selected_user %}
+                    <button type="button" class="btn btn-sm btn-primary" id="refreshGroupsBtn">
+                        <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                    </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div id="groupsContainer">
+                    {% if selected_user %}
+                        {% if groups %}
+                            <div class="row">
+                                {% for group in groups %}
+                                    <div class="col-md-4 mb-3">
+                                        <div class="card group-card" data-group-id="{{ group.id }}">
+                                            <div class="card-header d-flex align-items-center">
+                                                <div class="group-icon">
+                                                    <i class="bi bi-{{ 'broadcast' if group.entity_type == 'channel' else 'people-fill' }}"></i>
+                                                </div>
+                                                <h5 class="card-title mb-0">{{ group.title }}</h5>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="card-text">
+                                                    <small class="text-muted">
+                                                        {{ group.members_count }} membri
+                                                        {% if group.unread_count > 0 %}
+                                                            <span class="badge bg-danger">{{ group.unread_count }} non letti</span>
+                                                        {% endif %}
+                                                    </small>
+                                                </p>
+                                                <div class="d-grid gap-2">
+                                                    <button class="btn btn-sm btn-primary btn-monitor" data-group-id="{{ group.id }}">
+                                                        <i class="bi bi-broadcast"></i> Monitora
+                                                    </button>
+                                                    <button class="btn btn-sm btn-success btn-download" data-group-id="{{ group.id }}">
+                                                        <i class="bi bi-cloud-download"></i> Download
+                                                    </button>
+                                                    <button class="btn btn-sm btn-info btn-archive" data-group-id="{{ group.id }}">
+                                                        <i class="bi bi-archive"></i> Archivia
+                                                    </button>
+                                                    <button class="btn btn-sm btn-secondary btn-invite-link" data-group-id="{{ group.id }}">
+                                                        <i class="bi bi-link-45deg"></i> Link invito
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> Nessun gruppo trovato per l'utente selezionato.
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Seleziona un utente per visualizzare i gruppi.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Link Invito -->
+<div class="modal fade" id="inviteLinkModal" tabindex="-1" aria-labelledby="inviteLinkModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="inviteLinkModalLabel">Link di invito</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="inviteLinkSpinner">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Caricamento...</span>
+                        </div>
+                    </div>
+                    <p class="text-center mt-2">Generazione link in corso...</p>
+                </div>
+                <div id="inviteLinkContent" class="d-none">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> Usa questo link per invitare altri utenti nel gruppo:
+                    </div>
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="inviteLinkInput" readonly>
+                        <button class="btn btn-outline-primary" type="button" id="copyInviteLinkBtn">
+                            <i class="bi bi-clipboard"></i> Copia
+                        </button>
+                    </div>
+                </div>
+                <div id="inviteLinkError" class="d-none">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Impossibile generare il link di invito.
+                        <span id="inviteLinkErrorMessage"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Monitor -->
+<div class="modal fade" id="monitorModal" tabindex="-1" aria-labelledby="monitorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="monitorModalLabel">Monitoraggio Gruppo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Avvia il monitoraggio dei messaggi per il gruppo <span id="monitorGroupName" class="fw-bold"></span>.</p>
+                <input type="hidden" id="monitorGroupId">
+                <input type="hidden" id="monitorUserPhone" value="{{ selected_user }}">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="startMonitorBtn">
+                    <i class="bi bi-play-circle"></i> Avvia monitoraggio
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Download -->
+<div class="modal fade" id="downloadModal" tabindex="-1" aria-labelledby="downloadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="downloadModalLabel">Download Media</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Scarica i media dal gruppo <span id="downloadGroupName" class="fw-bold"></span>.</p>
+                <input type="hidden" id="downloadGroupId">
+                <input type="hidden" id="downloadUserPhone" value="{{ selected_user }}">
+                
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="downloadPhoto" checked>
+                    <label class="form-check-label" for="downloadPhoto">
+                        <i class="bi bi-image"></i> Scarica immagini
+                    </label>
+                </div>
+                
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="downloadVideo" checked>
+                    <label class="form-check-label" for="downloadVideo">
+                        <i class="bi bi-film"></i> Scarica video
+                    </label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="downloadMessages" checked>
+                    <label class="form-check-label" for="downloadMessages">
+                        <i class="bi bi-chat-text"></i> Salva messaggi
+                    </label>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="downloadLimit" class="form-label">Limite messaggi (0 = tutti)</label>
+                    <input type="number" class="form-control" id="downloadLimit" value="100" min="0">
+                    <small class="form-text text-muted">Un valore alto potrebbe richiedere molto tempo</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="startDownloadBtn">
+                    <i class="bi bi-cloud-download"></i> Avvia download
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Archive -->
+<div class="modal fade" id="archiveModal" tabindex="-1" aria-labelledby="archiveModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="archiveModalLabel">Archiviazione Gruppo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Crea un archivio completo dei media dal gruppo <span id="archiveGroupName" class="fw-bold"></span>.</p>
+                <input type="hidden" id="archiveGroupId">
+                <input type="hidden" id="archiveUserPhone" value="{{ selected_user }}">
+                
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> Attenzione: l'archiviazione completa di un gruppo può richiedere molto tempo e spazio su disco.
+                </div>
+                
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="archivePhoto" checked>
+                    <label class="form-check-label" for="archivePhoto">
+                        <i class="bi bi-image"></i> Archivia immagini
+                    </label>
+                </div>
+                
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="archiveVideo" checked>
+                    <label class="form-check-label" for="archiveVideo">
+                        <i class="bi bi-film"></i> Archivia video
+                    </label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="archiveMessages" checked>
+                    <label class="form-check-label" for="archiveMessages">
+                        <i class="bi bi-chat-text"></i> Salva messaggi
+                    </label>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="archiveLimit" class="form-label">Limite messaggi (0 = tutti)</label>
+                    <input type="number" class="form-control" id="archiveLimit" value="0" min="0">
+                    <small class="form-text text-muted">Un valore pari a 0 scaricherà tutti i messaggi del gruppo</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" id="startArchiveBtn">
+                    <i class="bi bi-archive"></i> Avvia archiviazione
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Script specifici per la pagina gruppi
+    document.addEventListener("DOMContentLoaded", function() {
+        // Ottieni utente selezionato
+        const selectedUser = '{{ selected_user }}';
+        
+        // Aggiungi event listener per pulsante aggiorna gruppi
+        const refreshGroupsBtn = document.getElementById('refreshGroupsBtn');
+        if (refreshGroupsBtn) {
+            refreshGroupsBtn.addEventListener('click', function() {
+                if (selectedUser) {
+                    loadUserGroups(selectedUser);
+                }
+            });
+        }
+        
+        // Aggiungi event listener per pulsanti delle card dei gruppi
+        document.querySelectorAll('.btn-monitor').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const groupId = this.dataset.groupId;
+                const groupName = this.closest('.group-card').querySelector('.card-title').textContent.trim();
+                showMonitorModal(groupId, groupName);
+            });
+        });
+        
+        document.querySelectorAll('.btn-download').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const groupId = this.dataset.groupId;
+                const groupName = this.closest('.group-card').querySelector('.card-title').textContent.trim();
+                showDownloadModal(groupId, groupName);
+            });
+        });
+        
+        document.querySelectorAll('.btn-archive').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const groupId = this.dataset.groupId;
+                const groupName = this.closest('.group-card').querySelector('.card-title').textContent.trim();
+                showArchiveModal(groupId, groupName);
+            });
+        });
+        
+        document.querySelectorAll('.btn-invite-link').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const groupId = this.dataset.groupId;
+                getInviteLink(selectedUser, groupId);
+            });
+        });
+        
+        // Aggiungi event listener per i pulsanti delle modali
+        const startMonitorBtn = document.getElementById('startMonitorBtn');
+        if (startMonitorBtn) {
+            startMonitorBtn.addEventListener('click', function() {
+                const groupId = document.getElementById('monitorGroupId').value;
+                startMonitoring([groupId]);
+                
+                // Chiudi modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('monitorModal'));
+                if (modal) {
+                    modal.hide();
+                }
+            });
+        }
+        
+        const startDownloadBtn = document.getElementById('startDownloadBtn');
+        if (startDownloadBtn) {
+            startDownloadBtn.addEventListener('click', function() {
+                const groupId = document.getElementById('downloadGroupId').value;
+                startDownload(groupId);
+                
+                // Chiudi modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('downloadModal'));
+                if (modal) {
+                    modal.hide();
+                }
+            });
+        }
+        
+        const startArchiveBtn = document.getElementById('startArchiveBtn');
+        if (startArchiveBtn) {
+            startArchiveBtn.addEventListener('click', function() {
+                const groupId = document.getElementById('archiveGroupId').value;
+                startArchive(groupId);
+                
+                // Chiudi modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('archiveModal'));
+                if (modal) {
+                    modal.hide();
+                }
+            });
+        }
+        
+        // Aggiungi event listener per il pulsante copia link
+        const copyInviteLinkBtn = document.getElementById('copyInviteLinkBtn');
+        if (copyInviteLinkBtn) {
+            copyInviteLinkBtn.addEventListener('click', function() {
+                const inviteLinkInput = document.getElementById('inviteLinkInput');
+                if (inviteLinkInput) {
+                    inviteLinkInput.select();
+                    document.execCommand('copy');
+                    
+                    // Cambia testo pulsante temporaneamente
+                    const originalText = this.innerHTML;
+                    this.innerHTML = '<i class="bi bi-check"></i> Copiato!';
+                    
+                    setTimeout(() => {
+                        this.innerHTML = originalText;
+                    }, 2000);
+                }
+            });
+        }
+    });
+    
+    // Mostra modal per monitoraggio
+    function showMonitorModal(groupId, groupName) {
+        const monitorModal = document.getElementById('monitorModal');
+        const monitorGroupId = document.getElementById('monitorGroupId');
+        const monitorGroupName = document.getElementById('monitorGroupName');
+        
+        if (monitorModal && monitorGroupId && monitorGroupName) {
+            monitorGroupId.value = groupId;
+            monitorGroupName.textContent = groupName;
+            
+            const modalInstance = new bootstrap.Modal(monitorModal);
+            modalInstance.show();
+        }
+    }
+    
+    // Mostra modal per download
+    function showDownloadModal(groupId, groupName) {
+        const downloadModal = document.getElementById('downloadModal');
+        const downloadGroupId = document.getElementById('downloadGroupId');
+        const downloadGroupName = document.getElementById('downloadGroupName');
+        
+        if (downloadModal && downloadGroupId && downloadGroupName) {
+            downloadGroupId.value = groupId;
+            downloadGroupName.textContent = groupName;
+            
+            const modalInstance = new bootstrap.Modal(downloadModal);
+            modalInstance.show();
+        }
+    }
+    
+    // Mostra modal per archiviazione
+    function showArchiveModal(groupId, groupName) {
+        const archiveModal = document.getElementById('archiveModal');
+        const archiveGroupId = document.getElementById('archiveGroupId');
+        const archiveGroupName = document.getElementById('archiveGroupName');
+        
+        if (archiveModal && archiveGroupId && archiveGroupName) {
+            archiveGroupId.value = groupId;
+            archiveGroupName.textContent = groupName;
+            
+            const modalInstance = new bootstrap.Modal(archiveModal);
+            modalInstance.show();
+        }
+    }
+    
+    // Ottieni link di invito
+    function getInviteLink(userPhone, groupId) {
+        // Mostra modal
+        const inviteLinkModal = document.getElementById('inviteLinkModal');
+        const inviteLinkSpinner = document.getElementById('inviteLinkSpinner');
+        const inviteLinkContent = document.getElementById('inviteLinkContent');
+        const inviteLinkError = document.getElementById('inviteLinkError');
+        const inviteLinkInput = document.getElementById('inviteLinkInput');
+        const inviteLinkErrorMessage = document.getElementById('inviteLinkErrorMessage');
+        
+        if (inviteLinkModal && inviteLinkSpinner && inviteLinkContent && inviteLinkError && inviteLinkInput && inviteLinkErrorMessage) {
+            // Reset modal
+            inviteLinkSpinner.classList.remove('d-none');
+            inviteLinkContent.classList.add('d-none');
+            inviteLinkError.classList.add('d-none');
+            
+            // Mostra modal
+            const modalInstance = new bootstrap.Modal(inviteLinkModal);
+            modalInstance.show();
+            
+            // Esegui richiesta API
+            fetch(`/api/group/invite/${userPhone}/${groupId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Nascondi spinner
+                    inviteLinkSpinner.classList.add('d-none');
+                    
+                    if (data.success) {
+                        // Mostra link
+                        inviteLinkContent.classList.remove('d-none');
+                        inviteLinkInput.value = data.invite_link;
+                    } else {
+                        // Mostra errore
+                        inviteLinkError.classList.remove('d-none');
+                        inviteLinkErrorMessage.textContent = data.message || 'Errore sconosciuto';
+                    }
+                })
+                .catch(error => {
+                    // Nascondi spinner
+                    inviteLinkSpinner.classList.add('d-none');
+                    
+                    // Mostra errore
+                    inviteLinkError.classList.remove('d-none');
+                    inviteLinkErrorMessage.textContent = error.message || 'Errore di connessione';
+                    
+                    console.error('Errore nell\'ottenimento del link di invito:', error);
+                });
+        }
+    }
+</script>
+{% endblock %}

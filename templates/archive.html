@@ -1,0 +1,489 @@
+{% extends "layout.html" %}
+
+{% block head %}
+<title>Archivio Media - Telegram Manager</title>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="mb-4">Archivio Storico Media</h1>
+        
+        <!-- Card avvio archiviazione -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-archive"></i> Crea Nuovo Archivio</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> <strong>Attenzione:</strong> L'archiviazione completa di un gruppo può richiedere molto tempo e spazio su disco, specialmente per gruppi con molti media.
+                </div>
+                
+                <form id="startArchiveForm" class="row g-3">
+                    <div class="col-md-6">
+                        <label for="archiveUserSelect" class="form-label">Utente</label>
+                        <select class="form-select" id="archiveUserSelect" required>
+                            <option value="">Seleziona utente</option>
+                            {% for user in users %}
+                                <option value="{{ user.phone }}">{{ user.first_name }} {{ user.last_name|default("") }} ({{ user.phone }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="archiveGroupSelect" class="form-label">Gruppo</label>
+                        <select class="form-select" id="archiveGroupSelect" disabled>
+                            <option value="">Seleziona prima un utente</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label class="form-label">Tipi di media da archiviare</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="archivePhoto" checked>
+                            <label class="form-check-label" for="archivePhoto">
+                                <i class="bi bi-image"></i> Immagini
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="archiveVideo" checked>
+                            <label class="form-check-label" for="archiveVideo">
+                                <i class="bi bi-film"></i> Video
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="archiveMessages" checked>
+                            <label class="form-check-label" for="archiveMessages">
+                                <i class="bi bi-chat-text"></i> Messaggi
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label for="archiveLimit" class="form-label">Limite messaggi da archiviare</label>
+                        <input type="number" class="form-control" id="archiveLimit" value="0" min="0">
+                        <small class="form-text text-muted">0 = tutti i messaggi (può richiedere molto tempo)</small>
+                    </div>
+                    
+                    <input type="hidden" id="archiveUserPhone" value="">
+                    
+                    <div class="col-12">
+                        <button type="button" class="btn btn-primary btn-start-archive" disabled>
+                            <i class="bi bi-archive"></i> Crea archivio
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Archiviazioni in corso -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Archiviazioni in Corso</h5>
+            </div>
+            <div class="card-body">
+                <div id="archivesContainer">
+                    {% if archives %}
+                        {% for task_id, archive in archives.items() %}
+                            <div class="archive-item card mb-3" data-task-id="{{ task_id }}">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0">
+                                        <i class="bi bi-archive"></i> Archivio: {{ archive.group_name }}
+                                    </h5>
+                                    <span class="badge {{ 'bg-success' if archive.status == 'completed' else 'bg-danger' if archive.status == 'error' else 'bg-primary' }}">
+                                        {{ 'Completato' if archive.status == 'completed' else 'Errore' if archive.status == 'error' else 'In corso' }}
+                                    </span>
+                                </div>
+                                <div class="card-body">
+                                    <p>Utente: {{ archive.user_phone }}</p>
+                                    <p>Avviato: {{ archive.start_time|format_datetime }}</p>
+                                    <div class="progress">
+                                        <div class="progress-bar {{ 'bg-success' if archive.status == 'completed' else 'bg-danger' if archive.status == 'error' else 'progress-bar-striped progress-bar-animated' }}" 
+                                             role="progressbar" style="width: {{ archive.progress }}%" 
+                                             aria-valuenow="{{ archive.progress }}" aria-valuemin="0" aria-valuemax="100">{{ archive.progress }}%</div>
+                                    </div>
+                                    <p class="text-center mt-1">
+                                        {% if archive.status == 'scanning' %}
+                                            Scansione messaggi: {{ archive.processed_messages }}/{{ archive.total_messages }}
+                                        {% else %}
+                                            {{ archive.archived_media }}/{{ archive.total_media }} media {{ 'archiviati' if archive.status == 'completed' else 'archiviati finora' }}
+                                        {% endif %}
+                                    </p>
+                                    
+                                    {% if archive.status == 'completed' %}
+                                        <div class="d-grid gap-2 mt-3">
+                                            <a href="/archivio/{{ archive.group_dir_name }}" class="btn btn-sm btn-success" target="_blank">
+                                                <i class="bi bi-folder"></i> Apri archivio
+                                            </a>
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if archive.status == 'error' %}
+                                        <div class="alert alert-danger mt-3">
+                                            <i class="bi bi-exclamation-triangle"></i> {{ archive.error|default("Si è verificato un errore durante l'archiviazione") }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Nessuna archiviazione in corso. Crea un nuovo archivio utilizzando il form qui sopra.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Archivi disponibili -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-folder2-open"></i> Archivi Disponibili</h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshArchivesBtn">
+                    <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="availableArchivesContainer">
+                    <div class="spinner-container">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Caricamento...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Script specifici per la pagina archivio
+    document.addEventListener("DOMContentLoaded", function() {
+        // Ottieni elementi principali
+        const userSelect = document.getElementById('archiveUserSelect');
+        const groupSelect = document.getElementById('archiveGroupSelect');
+        const userPhoneInput = document.getElementById('archiveUserPhone');
+        const startArchiveBtn = document.querySelector('.btn-start-archive');
+        
+        // Aggiungi event listener per cambio utente
+        if (userSelect) {
+            userSelect.addEventListener('change', function() {
+                const selectedUser = this.value;
+                userPhoneInput.value = selectedUser;
+                
+                if (selectedUser) {
+                    // Abilita la select dei gruppi e aggiorna
+                    groupSelect.disabled = true;
+                    groupSelect.innerHTML = '<option value="">Caricamento gruppi...</option>';
+                    
+                    // Carica gruppi dell'utente
+                    loadUserGroupsForArchive(selectedUser);
+                } else {
+                    // Disabilita la select dei gruppi
+                    groupSelect.disabled = true;
+                    groupSelect.innerHTML = '<option value="">Seleziona prima un utente</option>';
+                    
+                    // Disabilita pulsante avvio
+                    startArchiveBtn.disabled = true;
+                }
+            });
+        }
+        
+        // Aggiungi event listener per cambio gruppo
+        if (groupSelect) {
+            groupSelect.addEventListener('change', function() {
+                const selectedGroup = this.value;
+                
+                // Abilita/disabilita pulsante avvio in base alla selezione
+                startArchiveBtn.disabled = !selectedGroup;
+            });
+        }
+        
+        // Aggiungi event listener per pulsante avvio archiviazione
+        if (startArchiveBtn) {
+            startArchiveBtn.addEventListener('click', function() {
+                // Ottieni utente selezionato
+                const userPhone = userPhoneInput.value;
+                
+                // Ottieni gruppo selezionato
+                const groupId = groupSelect.value;
+                
+                if (!userPhone) {
+                    showNotification('Errore', 'Seleziona un utente per l\'archiviazione', 'danger');
+                    return;
+                }
+                
+                if (!groupId) {
+                    showNotification('Errore', 'Seleziona un gruppo da archiviare', 'danger');
+                    return;
+                }
+                
+                // Ottieni tipi di media selezionati
+                const mediaTypes = [];
+                if (document.getElementById('archivePhoto').checked) mediaTypes.push('photo');
+                if (document.getElementById('archiveVideo').checked) mediaTypes.push('video');
+                
+                if (mediaTypes.length === 0) {
+                    showNotification('Errore', 'Seleziona almeno un tipo di media da archiviare', 'danger');
+                    return;
+                }
+                
+                // Ottieni limite messaggi
+                const limit = parseInt(document.getElementById('archiveLimit').value) || 0;
+                
+                // Chiedi conferma per archiviazioni complete
+                if (limit === 0) {
+                    showConfirmationModal(
+                        'Conferma archiviazione completa',
+                        'Stai per avviare un\'archiviazione completa di tutti i messaggi del gruppo. Questa operazione potrebbe richiedere molto tempo e spazio su disco. Vuoi procedere?',
+                        () => {
+                            // Avvia archiviazione
+                            startArchive(groupId, mediaTypes, limit);
+                        }
+                    );
+                } else {
+                    // Avvia archiviazione
+                    startArchive(groupId, mediaTypes, limit);
+                }
+            });
+        }
+        
+        // Carica archivi disponibili
+        loadAvailableArchives();
+        
+        // Aggiungi event listener per pulsante aggiorna archivi
+        const refreshArchivesBtn = document.getElementById('refreshArchivesBtn');
+        if (refreshArchivesBtn) {
+            refreshArchivesBtn.addEventListener('click', loadAvailableArchives);
+        }
+        
+        // Inizializza Socket.IO per aggiornamenti in tempo reale
+        initRealtimeUpdates();
+    });
+    
+    // Carica gruppi di un utente per l'archiviazione
+    function loadUserGroupsForArchive(userPhone) {
+        const groupSelect = document.getElementById('archiveGroupSelect');
+        const startArchiveBtn = document.querySelector('.btn-start-archive');
+        
+        // Esegui richiesta API
+        fetch(`/api/groups/${userPhone}`)
+            .then(response => response.json())
+            .then(groups => {
+                // Aggiorna select dei gruppi
+                groupSelect.innerHTML = '<option value="">Seleziona gruppo</option>';
+                
+                if (groups.length === 0) {
+                    groupSelect.innerHTML += '<option value="" disabled>Nessun gruppo trovato</option>';
+                    groupSelect.disabled = true;
+                    startArchiveBtn.disabled = true;
+                } else {
+                    // Aggiungi opzioni per i gruppi
+                    groups.forEach(group => {
+                        const option = document.createElement('option');
+                        option.value = group.id;
+                        option.textContent = group.title;
+                        groupSelect.appendChild(option);
+                    });
+                    
+                    // Abilita la select
+                    groupSelect.disabled = false;
+                    
+                    // Il pulsante rimane disabilitato finché non viene selezionato un gruppo
+                    startArchiveBtn.disabled = true;
+                }
+            })
+            .catch(error => {
+                console.error('Errore nel caricamento dei gruppi:', error);
+                
+                // Mostra errore nella select
+                groupSelect.innerHTML = '<option value="">Errore nel caricamento dei gruppi</option>';
+                groupSelect.disabled = true;
+                startArchiveBtn.disabled = true;
+                
+                // Mostra notifica
+                showNotification('Errore', 'Si è verificato un errore durante il caricamento dei gruppi', 'danger');
+            });
+    }
+    
+    // Carica archivi disponibili
+    function loadAvailableArchives() {
+        const archivesContainer = document.getElementById('availableArchivesContainer');
+        
+        if (archivesContainer) {
+            // Mostra spinner
+            archivesContainer.innerHTML = `
+                <div class="spinner-container">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Caricamento...</span>
+                    </div>
+                </div>
+            `;
+            
+            // Esegui richiesta API
+            fetch('/api/archive/all')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const archives = data.archives;
+                        
+                        if (archives.length === 0) {
+                            archivesContainer.innerHTML = `
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> Nessun archivio disponibile. Crea un nuovo archivio utilizzando il form qui sopra.
+                                </div>
+                            `;
+                        } else {
+                            // Crea grid di card per gli archivi
+                            archivesContainer.innerHTML = `<div class="row">`;
+                            
+                            archives.forEach(archive => {
+                                const archiveCard = `
+                                    <div class="col-md-4 mb-3">
+                                        <div class="card h-100">
+                                            <div class="card-header d-flex justify-content-between align-items-center">
+                                                <h5 class="card-title mb-0">
+                                                    <i class="bi bi-archive"></i> ${archive.group_dir_name.split('-')[0]}
+                                                </h5>
+                                                <span class="badge bg-info">${archive.total_media} media</span>
+                                            </div>
+                                            <div class="card-body">
+                                                <p><i class="bi bi-calendar"></i> Creato: ${new Date(archive.creation_date).toLocaleString()}</p>
+                                                <p>
+                                                    <i class="bi bi-image"></i> Immagini: ${archive.images_count}<br>
+                                                    <i class="bi bi-film"></i> Video: ${archive.videos_count}
+                                                </p>
+                                                <p><i class="bi bi-hdd"></i> Dimensione: ${formatBytes(archive.total_size)}</p>
+                                                <div class="d-grid gap-2">
+                                                    <a href="/archivio/${archive.group_dir_name}" class="btn btn-sm btn-primary" target="_blank">
+                                                        <i class="bi bi-folder"></i> Apri archivio
+                                                    </a>
+                                                    <button type="button" class="btn btn-sm btn-danger btn-delete-archive" data-archive-id="${archive.group_dir_name}">
+                                                        <i class="bi bi-trash"></i> Elimina
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                
+                                archivesContainer.innerHTML += archiveCard;
+                            });
+                            
+                            archivesContainer.innerHTML += `</div>`;
+                            
+                            // Aggiungi event listener per pulsanti elimina
+                            document.querySelectorAll('.btn-delete-archive').forEach(btn => {
+                                btn.addEventListener('click', function() {
+                                    const archiveId = this.dataset.archiveId;
+                                    deleteArchive(archiveId);
+                                });
+                            });
+                        }
+                    } else {
+                        archivesContainer.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i> Errore nel caricamento degli archivi.
+                                ${data.error || ''}
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore nel caricamento degli archivi:', error);
+                    
+                    archivesContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> Si è verificato un errore durante il caricamento degli archivi.
+                        </div>
+                    `;
+                });
+        }
+    }
+    
+    // Elimina un archivio
+    function deleteArchive(archiveId) {
+        // Chiedi conferma
+        showConfirmationModal(
+            'Elimina archivio',
+            'Sei sicuro di voler eliminare questo archivio? Tutti i file archiviati verranno eliminati definitivamente.',
+            () => {
+                // Esegui richiesta API
+                fetch(`/api/archive/${archiveId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification('Successo', 'Archivio eliminato con successo', 'success');
+                        
+                        // Aggiorna lista archivi
+                        loadAvailableArchives();
+                    } else {
+                        showNotification('Errore', data.message || 'Errore nell\'eliminazione dell\'archivio', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Errore nell\'eliminazione dell\'archivio:', error);
+                    showNotification('Errore', 'Si è verificato un errore durante l\'eliminazione dell\'archivio', 'danger');
+                });
+            }
+        );
+    }
+    
+    // Formatta bytes in formato leggibile
+    function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 Bytes';
+        
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+        
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+    
+    // Inizializza aggiornamenti in tempo reale
+    function initRealtimeUpdates() {
+        // Gestisci evento di avvio archiviazione
+        window.socket.on('archive_started', function(data) {
+            console.log('Archiviazione avviata:', data);
+            updateArchiveStatus(data);
+        });
+        
+        // Gestisci evento di scansione archiviazione
+        window.socket.on('archive_scanning', function(data) {
+            console.log('Scansione archiviazione:', data);
+            updateArchiveProgress(data, 'scanning');
+        });
+        
+        // Gestisci evento di progresso archiviazione
+        window.socket.on('archive_progress', function(data) {
+            console.log('Progresso archiviazione:', data);
+            updateArchiveProgress(data, 'downloading');
+        });
+        
+        // Gestisci evento di completamento archiviazione
+        window.socket.on('archive_completed', function(data) {
+            console.log('Archiviazione completata:', data);
+            updateArchiveStatus(data, 'completed');
+            
+            // Aggiorna lista archivi
+            setTimeout(loadAvailableArchives, 1000);
+        });
+        
+        // Gestisci evento di errore archiviazione
+        window.socket.on('archive_error', function(data) {
+            console.error('Errore archiviazione:', data);
+            updateArchiveStatus(data, 'error');
+        });
+    }
+</script>
+{% endblock %}
