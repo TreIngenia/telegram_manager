@@ -237,23 +237,112 @@ def api_users():
         return jsonify(user_manager.get_all_users())
     
     elif request.method == 'POST':
-        data = request.json
-        phone = data.get('phone')
-        if not phone:
-            return jsonify({'success': False, 'error': 'Numero di telefono mancante'}), 400
-        
-        result = asyncio.run(user_manager.add_user(phone))
-        return jsonify(result)
+        try:
+            data = request.json
+            phone = data.get('phone')
+            if not phone:
+                return jsonify({'success': False, 'error': 'Numero di telefono mancante', 'status': 'error'}), 400
+            
+            # Log per debug
+            logger.info(f"Tentativo di aggiunta utente con telefono: {phone}")
+            
+            result = asyncio.run(user_manager.add_user(phone))
+            
+            # Log risultato
+            logger.info(f"Risultato add_user: {result}")
+            
+            # Assicurati che 'status' e 'phone' siano nella risposta
+            if 'status' not in result:
+                result['status'] = 'error' if not result.get('success') else 'success'
+            if 'phone' not in result:
+                result['phone'] = phone
+                
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Errore nell'aggiunta dell'utente: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return jsonify({
+                'success': False, 
+                'status': 'error',
+                'error': str(e),
+                'phone': phone if 'phone' in locals() else None
+            }), 500
     
     elif request.method == 'DELETE':
+        try:
+            data = request.json
+            phone = data.get('phone')
+            if not phone:
+                return jsonify({'success': False, 'error': 'Numero di telefono mancante'}), 400
+            
+            result = user_manager.remove_user(phone)
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Errore nella rimozione dell'utente: {str(e)}")
+            return jsonify({
+                'success': False, 
+                'status': 'error',
+                'error': str(e),
+                'phone': phone if 'phone' in locals() else None
+            }), 500
+
+@app.route('/api/users/verify', methods=['POST'])
+def api_users_verify():
+    """API per verificare un utente con codice o password."""
+    try:
         data = request.json
         phone = data.get('phone')
-        if not phone:
-            return jsonify({'success': False, 'error': 'Numero di telefono mancante'}), 400
+        code = data.get('code')
+        password = data.get('password')
+        phone_code_hash = data.get('phone_code_hash')
         
-        result = user_manager.remove_user(phone)
+        if not phone:
+            return jsonify({'success': False, 'error': 'Numero di telefono mancante', 'status': 'error'}), 400
+        
+        # Log per debug
+        logger.info(f"Tentativo di verifica per {phone}, codice: {code is not None}, password: {password is not None}, phone_code_hash: {phone_code_hash}")
+        
+        # Passa phone_code_hash al metodo authenticate_user
+        result = asyncio.run(user_manager.authenticate_user(phone, code, password, phone_code_hash))
+        
+        # Log risultato
+        logger.info(f"Risultato verifica: {result}")
+        
+        # Assicurati che status e phone siano nella risposta
+        if 'status' not in result:
+            result['status'] = 'error' if not result.get('success') else 'success'
+        if 'phone' not in result:
+            result['phone'] = phone
+            
         return jsonify(result)
+    except Exception as e:
+        logger.error(f"Errore nella verifica dell'utente: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False, 
+            'status': 'error',
+            'error': str(e),
+            'phone': phone if 'phone' in locals() else None
+        }), 500
 
+@app.route('/api/users/status/<phone>', methods=['GET'])
+def api_user_status(phone):
+    """API per verificare lo stato di autenticazione di un utente."""
+    try:
+        # Controlla lo stato dell'utente
+        client_info = asyncio.run(user_manager.get_user_auth_status(phone))
+        return jsonify(client_info)
+    except Exception as e:
+        app.logger.error(f"Errore nel controllo dello stato di {phone}: {e}")
+        return jsonify({
+            'success': False,
+            'status': 'error',
+            'message': str(e),
+            'phone': phone
+        })
+    
 @app.route('/api/groups/<user_phone>', methods=['GET'])
 def api_groups(user_phone):
     """API per ottenere i gruppi di un utente."""

@@ -89,7 +89,7 @@ class TelegramClientManager:
                 'phone': phone
             }
     
-    async def authenticate_client(self, phone, code=None, password=None):
+    async def authenticate_client(self, phone, code=None, password=None, phone_code_hash=None):
         """Autentica un client Telegram con codice o password."""
         try:
             # Ottieni client esistente o creane uno nuovo
@@ -105,17 +105,50 @@ class TelegramClientManager:
             
             # Invia codice se non è stato fornito
             if not code:
-                await client.send_code_request(phone)
-                logger.info(f"Codice di autenticazione richiesto per {phone}")
-                return {
-                    'success': True,
-                    'status': 'code_sent',
-                    'phone': phone
-                }
+                # Invia il codice e ottieni il phone_code_hash
+                try:
+                    result = await client.send_code_request(phone)
+                    phone_code_hash = result.phone_code_hash
+                    logger.info(f"Codice di autenticazione richiesto per {phone}, phone_code_hash: {phone_code_hash}")
+                    
+                    # Salva il phone_code_hash
+                    self._save_phone_code_hash(phone, phone_code_hash)
+                    
+                    return {
+                        'success': False,
+                        'status': 'code_sent',
+                        'message': 'Codice di verifica inviato',
+                        'phone': phone,
+                        'phone_code_hash': phone_code_hash
+                    }
+                except Exception as e:
+                    logger.error(f"Errore nell'invio del codice per {phone}: {e}")
+                    return {
+                        'success': False,
+                        'status': 'error',
+                        'message': f"Errore nell'invio del codice: {str(e)}",
+                        'phone': phone
+                    }
             
             # Tenta il login con il codice fornito
             try:
-                await client.sign_in(phone, code)
+                # Se non è stato fornito un phone_code_hash, prova a recuperarlo
+                if not phone_code_hash:
+                    phone_code_hash = self._get_phone_code_hash(phone)
+                    
+                if not phone_code_hash:
+                    logger.error(f"phone_code_hash non trovato per {phone}")
+                    return {
+                        'success': False,
+                        'status': 'error',
+                        'message': 'Sessione di verifica scaduta, riprova',
+                        'phone': phone
+                    }
+                
+                logger.info(f"Tentativo di sign_in per {phone} con code={code}, phone_code_hash={phone_code_hash}")
+                
+                # Usa il phone_code_hash per la sign_in
+                await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
                 
                 # Se l'autenticazione è andata a buon fine, salva il client
                 self.clients[phone] = client
@@ -123,6 +156,9 @@ class TelegramClientManager:
                 
                 # Salva la sessione
                 await self.save_session(phone, client)
+                
+                # Pulisci il phone_code_hash
+                self._remove_phone_code_hash(phone)
                 
                 return {
                     'success': True,
@@ -136,6 +172,7 @@ class TelegramClientManager:
                     return {
                         'success': False,
                         'status': 'password_required',
+                        'message': 'Richiesta password 2FA',
                         'phone': phone
                     }
                 
@@ -149,6 +186,9 @@ class TelegramClientManager:
                 # Salva la sessione
                 await self.save_session(phone, client)
                 
+                # Pulisci il phone_code_hash
+                self._remove_phone_code_hash(phone)
+                
                 return {
                     'success': True,
                     'status': 'authenticated',
@@ -157,12 +197,62 @@ class TelegramClientManager:
             
         except Exception as e:
             logger.error(f"Errore nell'autenticazione del client Telegram per {phone}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 'success': False,
                 'status': 'error',
                 'message': str(e),
                 'phone': phone
             }
+
+    # Aggiungi questi metodi per gestire il phone_code_hash
+    def _save_phone_code_hash(self, phone, phone_code_hash):
+        """Salva il phone_code_hash associato a un numero di telefono."""
+        # Usa un dizionario in memoria
+        if not hasattr(self, 'phone_code_hashes'):
+            self.phone_code_hashes = {}
+        
+        self.phone_code_hashes[phone] = phone_code_hash
+        
+        # Opzionalmente, salva anche su file per persistenza
+        try:
+            hash_file = Path(self.sessions_dir) / f"{phone}.hash"
+            with open(hash_file, 'w') as f:
+                f.write(phone_code_hash)
+        except Exception as e:
+            logger.error(f"Errore nel salvataggio del phone_code_hash per {phone}: {e}")
+
+    def _get_phone_code_hash(self, phone):
+        """Ottiene il phone_code_hash associato a un numero di telefono."""
+        # Prova prima dalla memoria
+        if hasattr(self, 'phone_code_hashes') and phone in self.phone_code_hashes:
+            return self.phone_code_hashes.get(phone)
+        
+        # Altrimenti prova dal file
+        try:
+            hash_file = Path(self.sessions_dir) / f"{phone}.hash"
+            if hash_file.exists():
+                with open(hash_file, 'r') as f:
+                    return f.read().strip()
+        except Exception as e:
+            logger.error(f"Errore nella lettura del phone_code_hash per {phone}: {e}")
+        
+        return None
+
+    def _remove_phone_code_hash(self, phone):
+        """Rimuove il phone_code_hash associato a un numero di telefono."""
+        # Rimuovi dalla memoria
+        if hasattr(self, 'phone_code_hashes') and phone in self.phone_code_hashes:
+            del self.phone_code_hashes[phone]
+        
+        # Rimuovi dal file
+        try:
+            hash_file = Path(self.sessions_dir) / f"{phone}.hash"
+            if hash_file.exists():
+                hash_file.unlink()
+        except Exception as e:
+            logger.error(f"Errore nella rimozione del phone_code_hash per {phone}: {e}")
     
     async def save_session(self, phone, client):
         """Salva la sessione di un client Telegram su file."""

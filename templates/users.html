@@ -79,26 +79,53 @@
         </div>
     </div>
 </div>
+
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Debug info
+    console.log("DOM caricato - Users page");
+    console.log("Bootstrap disponibile:", typeof bootstrap !== 'undefined');
+    console.log("Modal constructor:", typeof bootstrap !== 'undefined' ? typeof bootstrap.Modal : 'undefined');
+    
     // Script specifici per la pagina utenti
     document.addEventListener("DOMContentLoaded", function() {
+        console.log("DOM completamente caricato");
+        
         // Gestisci l'invio del form di aggiunta utente
         const addUserForm = document.getElementById('addUserForm');
         if (addUserForm) {
+            console.log("Form addUserForm trovato");
             addUserForm.addEventListener('submit', function(e) {
                 e.preventDefault();
+                console.log("Form submit - Chiamata addUser()");
                 addUser();
             });
+        } else {
+            console.warn("Form addUserForm non trovato");
+        }
+        
+        // Aggiungi event listener per il pulsante di aggiunta utente
+        const addUserBtn = document.getElementById('addUserBtn');
+        if (addUserBtn) {
+            console.log("Bottone addUserBtn trovato");
+            addUserBtn.addEventListener('click', function() {
+                console.log("Click addUserBtn - Chiamata addUser()");
+                addUser();
+            });
+        } else {
+            console.warn("Bottone addUserBtn non trovato");
         }
         
         // Aggiungi event listener per pulsanti rimuovi utente
         const removeUserBtns = document.querySelectorAll('.btn-remove-user');
+        console.log("Trovati", removeUserBtns.length, "bottoni rimuovi utente");
         removeUserBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 const phone = this.dataset.phone;
+                console.log("Click rimuovi utente per", phone);
                 showConfirmationModal(
                     'Rimuovere utente',
                     `Sei sicuro di voler rimuovere l'utente ${phone}?`,
@@ -106,6 +133,18 @@
                 );
             });
         });
+        
+        // Controlla se esistono già le modali, per debugging
+        console.log("verificationCodeModal esiste:", !!document.getElementById('verificationCodeModal'));
+        console.log("twoFAPasswordModal esiste:", !!document.getElementById('twoFAPasswordModal'));
+        
+        // Testa la funzione showVerificationCodeDialog se necessario
+        /*
+        setTimeout(() => {
+            console.log("Test mostra dialog verifica");
+            showVerificationCodeDialog('393473587315');
+        }, 2000);
+        */
     });
 </script>
 {% endblock %}

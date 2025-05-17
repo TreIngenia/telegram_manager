@@ -43,42 +43,17 @@ class UserManager:
             if not client_info['success'] and client_info['status'] == 'authentication_required':
                 # Invia codice di verifica
                 auth_info = await self.telegram_manager.authenticate_client(phone)
+                
+                # Aggiungi log di debug
+                logger.info(f"Risultato auth_info per {phone}: {auth_info}")
+                
+                # Assicurati che lo 'status' e 'phone' siano nella risposta
+                if 'status' not in auth_info:
+                    auth_info['status'] = 'error' if not auth_info.get('success') else 'success'
+                if 'phone' not in auth_info:
+                    auth_info['phone'] = phone
+                    
                 return auth_info
-            
-            # Se l'utente è già autenticato, aggiungi alla lista
-            if client_info['success']:
-                # Ottieni informazioni utente
-                client = client_info['client']
-                me = await client.get_me()
-                
-                # Crea directory per i media dell'utente
-                user_media_dir = Path(os.getenv('BASE_MEDIA_PATH')) / phone / 'privata'
-                ensure_directory(user_media_dir / 'immagini')
-                ensure_directory(user_media_dir / 'video')
-                
-                # Aggiungi utente
-                user_data = {
-                    'id': me.id,
-                    'first_name': me.first_name,
-                    'last_name': me.last_name,
-                    'username': me.username,
-                    'phone': phone,
-                    'status': 'active'
-                }
-                
-                self.users.append(user_data)
-                save_to_json(self.users, self.users_file)
-                
-                logger.info(f"Utente {phone} aggiunto con successo")
-                return {
-                    'success': True,
-                    'status': 'user_added',
-                    'user': user_data,
-                    'phone': phone
-                }
-            
-            # Se c'è stato un errore
-            return client_info
         
         except Exception as e:
             logger.error(f"Errore nell'aggiunta dell'utente {phone}: {e}")
@@ -89,11 +64,11 @@ class UserManager:
                 'phone': phone
             }
     
-    async def authenticate_user(self, phone, code=None, password=None):
+    async def authenticate_user(self, phone, code=None, password=None, phone_code_hash=None):
         """Autentica un utente Telegram con codice o password."""
         try:
             # Tenta l'autenticazione
-            auth_info = await self.telegram_manager.authenticate_client(phone, code, password)
+            auth_info = await self.telegram_manager.authenticate_client(phone, code, password, phone_code_hash)
             
             # Se l'autenticazione è andata a buon fine, aggiorna l'utente
             if auth_info['success'] and auth_info['status'] == 'authenticated':
@@ -136,7 +111,7 @@ class UserManager:
                 logger.info(f"Utente {phone} autenticato con successo")
                 return {
                     'success': True,
-                    'status': 'user_authenticated',
+                    'status': 'authenticated',
                     'user': user_data,
                     'phone': phone
                 }
@@ -146,6 +121,8 @@ class UserManager:
         
         except Exception as e:
             logger.error(f"Errore nell'autenticazione dell'utente {phone}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 'success': False,
                 'status': 'error',
@@ -241,3 +218,51 @@ class UserManager:
                 logger.info(f"Sessione ripristinata per {phone}")
         
         return True
+    
+    async def get_user_auth_status(self, phone):
+        """Ottiene lo stato di autenticazione di un utente."""
+        try:
+            # Controlla se l'utente esiste già nella lista
+            for user in self.users:
+                if user.get('phone') == phone:
+                    return {
+                        'success': True,
+                        'status': 'authenticated',
+                        'phone': phone
+                    }
+            
+            # Ottieni client Telegram
+            client = await self.telegram_manager.get_client(phone)
+            
+            if client is None:
+                # Nessun client, probabile che sia necessario il codice
+                return {
+                    'success': False,
+                    'status': 'code_sent',
+                    'phone': phone
+                }
+            
+            # Controlla se il client è autorizzato
+            is_authorized = await client.is_user_authorized()
+            
+            if is_authorized:
+                return {
+                    'success': True,
+                    'status': 'authenticated',
+                    'phone': phone
+                }
+            else:
+                # Client esiste ma non autorizzato
+                return {
+                    'success': False,
+                    'status': 'code_sent',
+                    'phone': phone
+                }
+        except Exception as e:
+            logger.error(f"Errore nel controllo dello stato di {phone}: {e}")
+            return {
+                'success': False,
+                'status': 'error',
+                'message': str(e),
+                'phone': phone
+            }
