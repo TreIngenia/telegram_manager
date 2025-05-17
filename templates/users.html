@@ -19,8 +19,8 @@
                     <div class="col-md-6">
                         <label for="newUserPhone" class="form-label">Numero di telefono</label>
                         <div class="input-group">
-                            <span class="input-group-text">+</span>
-                            <input type="text" class="form-control" id="newUserPhone" placeholder="39xxxxxxxxxx" required>
+                            <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                            <input type="text" class="form-control" id="newUserPhone" placeholder="+39xxxxxxxxxx" required>
                         </div>
                         <small class="form-text text-muted">Inserisci il numero di telefono con prefisso nazionale senza il simbolo +</small>
                     </div>
@@ -107,17 +107,17 @@
             console.warn("Form addUserForm non trovato");
         }
         
-        // Aggiungi event listener per il pulsante di aggiunta utente
-        const addUserBtn = document.getElementById('addUserBtn');
-        if (addUserBtn) {
-            console.log("Bottone addUserBtn trovato");
-            addUserBtn.addEventListener('click', function() {
-                console.log("Click addUserBtn - Chiamata addUser()");
-                addUser();
-            });
-        } else {
-            console.warn("Bottone addUserBtn non trovato");
-        }
+        // // Aggiungi event listener per il pulsante di aggiunta utente
+        // const addUserBtn = document.getElementById('addUserBtn');
+        // if (addUserBtn) {
+        //     console.log("Bottone addUserBtn trovato");
+        //     addUserBtn.addEventListener('click', function() {
+        //         console.log("Click addUserBtn - Chiamata addUser()");
+        //         addUser();
+        //     });
+        // } else {
+        //     console.warn("Bottone addUserBtn non trovato");
+        // }
         
         // Aggiungi event listener per pulsanti rimuovi utente
         const removeUserBtns = document.querySelectorAll('.btn-remove-user');

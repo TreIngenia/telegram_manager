@@ -28,7 +28,12 @@ class TelegramClientManager:
         self.sessions_dir = Path(SESSIONS_PATH)
         ensure_directory(self.sessions_dir)
         logger.info("TelegramClientManager inizializzato")
-    
+
+    def ensure_formatted_phone(phone):
+        if not phone.startswith("+"):
+            return f"+{phone}"
+        return phone
+
     async def create_client(self, phone):
         """Crea e configura un client Telegram per il numero di telefono specificato."""
         try:
@@ -146,33 +151,58 @@ class TelegramClientManager:
             }
     
     """
-Modifica da apportare al file modules/telegram_client.py per correggere il problema
-di autenticazione con il codice di verifica Telegram
-"""
+    Modifica da apportare al file modules/telegram_client.py per correggere il problema
+    di autenticazione con il codice di verifica Telegram
+    """
     async def authenticate_client(self, phone, code=None, password=None, phone_code_hash=None):
         """Autentica un client Telegram con codice o password."""
         try:
             # Ottieni client esistente o creane uno nuovo
-            client_info = self.clients.get(phone)
+            client = None
+            client_info = None
             
-            if not client_info:
+            # Formatta il numero di telefono correttamente
+            formatted_phone = phone
+            if not formatted_phone.startswith("+"):
+                formatted_phone = f"+{phone}"
+                
+            logger.info(f"Tentativo di autenticazione per {formatted_phone}")
+            
+            # Se c'è già un client per questo numero nel dizionario, usalo
+            if phone in self.clients:
+                client = self.clients[phone]
+                logger.info(f"Utilizzo client esistente per {phone}")
+            else:
+                # Altrimenti, crea un nuovo client
                 client_info = await self.create_client(phone)
                 if not client_info['success'] and client_info['status'] != 'authentication_required':
                     return client_info
-                client = client_info['client']
-            else:
-                client = client_info
+                client = client_info.get('client')
+                
+            if not client:
+                logger.error(f"Impossibile ottenere un client valido per {phone}")
+                return {
+                    'success': False,
+                    'status': 'error',
+                    'message': f"Impossibile ottenere un client valido per {phone}",
+                    'phone': phone
+                }
+                
+            # Verifica se il client è connesso
+            if not client.is_connected():
+                await client.connect()
+                logger.info(f"Client connesso per {phone}")
             
             # Se phone_code_hash non è fornito, prova a recuperarlo
             if not phone_code_hash:
                 phone_code_hash = self._get_phone_code_hash(phone)
                 logger.info(f"Recuperato phone_code_hash salvato per {phone}: {phone_code_hash}")
             
-            # Invia codice se non è stato fornito
+            # CASO 1: Invia codice se non è stato fornito né codice né password
             if not code and not password:
                 # Invia il codice e ottieni il phone_code_hash
                 try:
-                    result = await client.send_code_request(phone)
+                    result = await client.send_code_request(formatted_phone)
                     phone_code_hash = result.phone_code_hash
                     logger.info(f"Codice di autenticazione richiesto per {phone}, phone_code_hash: {phone_code_hash}")
                     
@@ -206,6 +236,8 @@ di autenticazione con il codice di verifica Telegram
                     }
                 except Exception as e:
                     logger.error(f"Errore nell'invio del codice per {phone}: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
                     return {
                         'success': False,
                         'status': 'error',
@@ -213,7 +245,7 @@ di autenticazione con il codice di verifica Telegram
                         'phone': phone
                     }
             
-            # Tenta il login con il codice fornito
+            # CASO 2: Tenta il login con il codice fornito
             if code:
                 try:
                     # Verifica che phone_code_hash sia disponibile
@@ -229,7 +261,19 @@ di autenticazione con il codice di verifica Telegram
                     logger.info(f"Tentativo di sign_in per {phone} con code={code}, phone_code_hash={phone_code_hash}")
                     
                     # Usa il phone_code_hash per la sign_in
-                    await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+                    try:
+                        # Prima prova con il formato normale
+                        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+                    except Exception as e1:
+                        logger.warning(f"Primo tentativo di sign_in fallito: {e1}")
+                        try:
+                            # Prova con il formato con + all'inizio
+                            await client.sign_in(formatted_phone, code, phone_code_hash=phone_code_hash)
+                        except Exception as e2:
+                            # Riprova con più timeout
+                            logger.warning(f"Secondo tentativo di sign_in fallito: {e2}")
+                            # Ultimo tentativo con parametri alternativi
+                            await client.sign_in(phone_number=formatted_phone, code=code, phone_code_hash=phone_code_hash)
                     
                     # Se l'autenticazione è andata a buon fine, salva il client
                     self.clients[phone] = client
@@ -241,9 +285,20 @@ di autenticazione con il codice di verifica Telegram
                     # Pulisci il phone_code_hash
                     self._remove_phone_code_hash(phone)
                     
+                    # Ottieni info dell'utente
+                    me = await client.get_me()
+                    user_info = {
+                        'id': me.id,
+                        'first_name': me.first_name,
+                        'last_name': me.last_name if hasattr(me, 'last_name') else None,
+                        'username': me.username if hasattr(me, 'username') else None,
+                        'phone': phone
+                    }
+                    
                     return {
                         'success': True,
                         'status': 'authenticated',
+                        'user': user_info,
                         'phone': phone
                     }
                 
@@ -256,15 +311,34 @@ di autenticazione con il codice di verifica Telegram
                         'phone': phone
                     }
                 except Exception as e:
-                    logger.error(f"Errore nell'autenticazione con codice per {phone}: {e}")
-                    return {
-                        'success': False,
-                        'status': 'error',
-                        'message': f"Errore nell'autenticazione con codice: {str(e)}",
-                        'phone': phone
-                    }
+                    if "phone code expired" in str(e).lower():
+                        logger.error(f"Codice di verifica scaduto per {phone}")
+                        return {
+                            'success': False,
+                            'status': 'code_expired',
+                            'message': 'Il codice di verifica è scaduto, richiedi un nuovo codice',
+                            'phone': phone
+                        }
+                    elif "phone code invalid" in str(e).lower():
+                        logger.error(f"Codice di verifica non valido per {phone}")
+                        return {
+                            'success': False,
+                            'status': 'code_invalid',
+                            'message': 'Il codice di verifica non è valido, controlla e riprova',
+                            'phone': phone
+                        }
+                    else:
+                        logger.error(f"Errore nell'autenticazione con codice per {phone}: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        return {
+                            'success': False,
+                            'status': 'error',
+                            'message': f"Errore nell'autenticazione con codice: {str(e)}",
+                            'phone': phone
+                        }
             
-            # Tenta il login con la password 2FA
+            # CASO 3: Tenta il login con la password 2FA
             elif password:
                 try:
                     await client.sign_in(password=password)
@@ -279,22 +353,43 @@ di autenticazione con il codice di verifica Telegram
                     # Pulisci il phone_code_hash
                     self._remove_phone_code_hash(phone)
                     
+                    # Ottieni info dell'utente
+                    me = await client.get_me()
+                    user_info = {
+                        'id': me.id,
+                        'first_name': me.first_name,
+                        'last_name': me.last_name if hasattr(me, 'last_name') else None,
+                        'username': me.username if hasattr(me, 'username') else None,
+                        'phone': phone
+                    }
+                    
                     return {
                         'success': True,
                         'status': 'authenticated',
+                        'user': user_info,
                         'phone': phone
                     }
                 except Exception as e:
                     logger.error(f"Errore nell'autenticazione 2FA per {phone}: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
                     return {
                         'success': False,
                         'status': 'error',
                         'message': f"Errore nell'autenticazione con password: {str(e)}",
                         'phone': phone
                     }
+            
+            # CASO NON GESTITO: nessuna operazione specificata
+            return {
+                'success': False,
+                'status': 'error',
+                'message': 'Nessuna operazione di autenticazione specificata',
+                'phone': phone
+            }
         
         except Exception as e:
-            logger.error(f"Errore nell'autenticazione del client Telegram per {phone}: {e}")
+            logger.error(f"Errore generale nell'autenticazione del client Telegram per {phone}: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return {

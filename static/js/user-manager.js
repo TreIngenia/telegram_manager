@@ -45,7 +45,7 @@ function setupManualCodeInput() {
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label for="manualPhone" class="form-label">Numero di telefono</label>
-                        <input type="text" class="form-control" id="manualPhone" placeholder="393xxxxxxxxx">
+                        <input type="text" class="form-control" id="manualPhone" placeholder="+393xxxxxxxxx">
                     </div>
                     <div class="col-md-6">
                         <label for="manualCode" class="form-label">Codice di verifica</label>
@@ -855,7 +855,7 @@ function requestNewCode(phone) {
     
     showSpinner("Richiedi nuovo codice", "Invio richiesta per un nuovo codice...");
     
-    fetch('/api/users/request-code', {
+    fetch('/api/users/verify', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -866,7 +866,7 @@ function requestNewCode(phone) {
     .then(data => {
         hideSpinner();
         
-        if (data.success === false && data.status === 'code_sent') {
+        if (data.status === 'code_sent') {
             // Codice inviato con successo
             showNotification('Info', `Nuovo codice di verifica inviato a ${data.phone}`, 'info');
             
