@@ -34,6 +34,28 @@ class TelegramClientManager:
         try:
             logger.info(f"Creazione client Telegram per {phone}")
             
+            # Format phone number properly - ensure it has a "+" at the beginning
+            formatted_phone = phone
+            if not formatted_phone.startswith("+"):
+                formatted_phone = f"+{phone}"
+                
+            logger.info(f"Utilizzo numero formattato: {formatted_phone}")
+                
+            # Log API credentials (partial for security)
+            api_id_partial = API_ID[:3] + "..." if API_ID else "None"
+            api_hash_partial = API_HASH[:5] + "..." if API_HASH else "None"
+            logger.info(f"Utilizzando API_ID: {api_id_partial}, API_HASH: {api_hash_partial}")
+            
+            # Verify API credentials are present
+            if not API_ID or not API_HASH:
+                logger.error("API_ID o API_HASH mancanti. Controlla il file .env")
+                return {
+                    'success': False,
+                    'status': 'error',
+                    'message': "Credenziali API di Telegram mancanti. Controlla il file .env",
+                    'phone': phone
+                }
+            
             # Carica sessione esistente se disponibile
             session_file = self.sessions_dir / f"{phone}.session"
             string_session = None
@@ -43,7 +65,7 @@ class TelegramClientManager:
                     string_session = f.read().strip()
                     logger.info(f"Sessione esistente caricata per {phone}")
             
-            # Crea il client
+            # Crea il client con parametri di retry e timeout migliorati
             client = TelegramClient(
                 StringSession(string_session) if string_session else StringSession(),
                 API_ID, 
@@ -51,14 +73,41 @@ class TelegramClientManager:
                 device_model="Telegram Web Manager",
                 system_version="1.0",
                 app_version="1.0",
-                lang_code="it"
+                lang_code="it",
+                connection_retries=10,  # Aggiunti parametri di retry come nell'app funzionante
+                retry_delay=3,
+                timeout=30  # Aumenta il timeout
             )
             
             # Connetti il client
-            await client.connect()
+            logger.info(f"Tentativo di connessione al client per {phone}")
+            try:
+                await client.connect()
+                logger.info(f"Connessione al client riuscita per {phone}")
+            except Exception as connection_error:
+                logger.error(f"Errore nella connessione al client per {phone}: {connection_error}")
+                return {
+                    'success': False,
+                    'status': 'connection_error',
+                    'message': f"Impossibile connettersi a Telegram: {str(connection_error)}",
+                    'phone': phone
+                }
             
             # Se non è già autenticato, avvia processo di login
-            if not await client.is_user_authorized():
+            is_authorized = False
+            try:
+                is_authorized = await client.is_user_authorized()
+                logger.info(f"Controllo autorizzazione per {phone}: {is_authorized}")
+            except Exception as auth_check_error:
+                logger.error(f"Errore nel controllo dell'autorizzazione per {phone}: {auth_check_error}")
+                return {
+                    'success': False,
+                    'status': 'auth_check_error',
+                    'message': f"Errore nel controllo dell'autorizzazione: {str(auth_check_error)}",
+                    'phone': phone
+                }
+                
+            if not is_authorized:
                 logger.info(f"Utente {phone} non autenticato. Avvio processo di autenticazione.")
                 return {
                     'success': False,
@@ -72,7 +121,11 @@ class TelegramClientManager:
             logger.info(f"Client Telegram creato con successo per {phone}")
             
             # Salva la sessione
-            await self.save_session(phone, client)
+            try:
+                await self.save_session(phone, client)
+            except Exception as session_error:
+                logger.error(f"Errore nel salvataggio della sessione per {phone}: {session_error}")
+                # Non interrompiamo l'esecuzione per questo errore
             
             return {
                 'success': True,
@@ -83,6 +136,8 @@ class TelegramClientManager:
         
         except Exception as e:
             logger.error(f"Errore nella creazione del client Telegram per {phone}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 'success': False,
                 'status': 'error',
@@ -94,10 +149,6 @@ class TelegramClientManager:
 Modifica da apportare al file modules/telegram_client.py per correggere il problema
 di autenticazione con il codice di verifica Telegram
 """
-
-# Cerca la seguente funzione nel file modules/telegram_client.py
-# e sostituiscila con questa versione corretta:
-
     async def authenticate_client(self, phone, code=None, password=None, phone_code_hash=None):
         """Autentica un client Telegram con codice o password."""
         try:
@@ -112,8 +163,13 @@ di autenticazione con il codice di verifica Telegram
             else:
                 client = client_info
             
+            # Se phone_code_hash non è fornito, prova a recuperarlo
+            if not phone_code_hash:
+                phone_code_hash = self._get_phone_code_hash(phone)
+                logger.info(f"Recuperato phone_code_hash salvato per {phone}: {phone_code_hash}")
+            
             # Invia codice se non è stato fornito
-            if not code:
+            if not code and not password:
                 # Invia il codice e ottieni il phone_code_hash
                 try:
                     result = await client.send_code_request(phone)
@@ -158,43 +214,40 @@ di autenticazione con il codice di verifica Telegram
                     }
             
             # Tenta il login con il codice fornito
-            try:
-                # Se non è stato fornito un phone_code_hash, prova a recuperarlo
-                if not phone_code_hash:
-                    phone_code_hash = self._get_phone_code_hash(phone)
+            if code:
+                try:
+                    # Verifica che phone_code_hash sia disponibile
+                    if not phone_code_hash:
+                        logger.error(f"phone_code_hash non trovato per {phone}")
+                        return {
+                            'success': False,
+                            'status': 'error',
+                            'message': 'Sessione di verifica scaduta, riprova',
+                            'phone': phone
+                        }
                     
-                if not phone_code_hash:
-                    logger.error(f"phone_code_hash non trovato per {phone}")
+                    logger.info(f"Tentativo di sign_in per {phone} con code={code}, phone_code_hash={phone_code_hash}")
+                    
+                    # Usa il phone_code_hash per la sign_in
+                    await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+                    
+                    # Se l'autenticazione è andata a buon fine, salva il client
+                    self.clients[phone] = client
+                    logger.info(f"Autenticazione completata con successo per {phone}")
+                    
+                    # Salva la sessione
+                    await self.save_session(phone, client)
+                    
+                    # Pulisci il phone_code_hash
+                    self._remove_phone_code_hash(phone)
+                    
                     return {
-                        'success': False,
-                        'status': 'error',
-                        'message': 'Sessione di verifica scaduta, riprova',
+                        'success': True,
+                        'status': 'authenticated',
                         'phone': phone
                     }
                 
-                logger.info(f"Tentativo di sign_in per {phone} con code={code}, phone_code_hash={phone_code_hash}")
-                
-                # Usa il phone_code_hash per la sign_in
-                await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
-                
-                # Se l'autenticazione è andata a buon fine, salva il client
-                self.clients[phone] = client
-                logger.info(f"Autenticazione completata con successo per {phone}")
-                
-                # Salva la sessione
-                await self.save_session(phone, client)
-                
-                # Pulisci il phone_code_hash
-                self._remove_phone_code_hash(phone)
-                
-                return {
-                    'success': True,
-                    'status': 'authenticated',
-                    'phone': phone
-                }
-            
-            except SessionPasswordNeededError:
-                if not password:
+                except SessionPasswordNeededError:
                     logger.info(f"Password 2FA richiesta per {phone}")
                     return {
                         'success': False,
@@ -202,26 +255,44 @@ di autenticazione con il codice di verifica Telegram
                         'message': 'Richiesta password 2FA',
                         'phone': phone
                     }
-                
-                # Tenta il login con la password
-                await client.sign_in(password=password)
-                
-                # Se l'autenticazione è andata a buon fine, salva il client
-                self.clients[phone] = client
-                logger.info(f"Autenticazione 2FA completata con successo per {phone}")
-                
-                # Salva la sessione
-                await self.save_session(phone, client)
-                
-                # Pulisci il phone_code_hash
-                self._remove_phone_code_hash(phone)
-                
-                return {
-                    'success': True,
-                    'status': 'authenticated',
-                    'phone': phone
-                }
+                except Exception as e:
+                    logger.error(f"Errore nell'autenticazione con codice per {phone}: {e}")
+                    return {
+                        'success': False,
+                        'status': 'error',
+                        'message': f"Errore nell'autenticazione con codice: {str(e)}",
+                        'phone': phone
+                    }
             
+            # Tenta il login con la password 2FA
+            elif password:
+                try:
+                    await client.sign_in(password=password)
+                    
+                    # Se l'autenticazione è andata a buon fine, salva il client
+                    self.clients[phone] = client
+                    logger.info(f"Autenticazione 2FA completata con successo per {phone}")
+                    
+                    # Salva la sessione
+                    await self.save_session(phone, client)
+                    
+                    # Pulisci il phone_code_hash
+                    self._remove_phone_code_hash(phone)
+                    
+                    return {
+                        'success': True,
+                        'status': 'authenticated',
+                        'phone': phone
+                    }
+                except Exception as e:
+                    logger.error(f"Errore nell'autenticazione 2FA per {phone}: {e}")
+                    return {
+                        'success': False,
+                        'status': 'error',
+                        'message': f"Errore nell'autenticazione con password: {str(e)}",
+                        'phone': phone
+                    }
+        
         except Exception as e:
             logger.error(f"Errore nell'autenticazione del client Telegram per {phone}: {e}")
             import traceback
@@ -234,9 +305,9 @@ di autenticazione con il codice di verifica Telegram
             }
 
     # Aggiungi questi metodi per gestire il phone_code_hash
+    # In telegram_client.py - aggiungere questi metodi
     def _save_phone_code_hash(self, phone, phone_code_hash):
         """Salva il phone_code_hash associato a un numero di telefono."""
-        # Usa un dizionario in memoria
         if not hasattr(self, 'phone_code_hashes'):
             self.phone_code_hashes = {}
         
