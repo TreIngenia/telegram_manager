@@ -73,11 +73,17 @@ function addUser() {
             } else if (data.status === 'code_sent') {
                 // Codice inviato, mostra dialog per inserimento codice
                 console.log("Codice inviato, mostrando dialog per", data.phone);
-                showVerificationCodeDialog(data.phone, data.phone_code_hash); // Passa anche il phone_code_hash
+                showVerificationCodeDialog(data.phone, data.phone_code_hash);
             } else if (data.status === 'password_required') {
                 // Richiesta password 2FA, mostra dialog per inserimento password
                 console.log("Password 2FA richiesta, mostrando dialog per", data.phone);
                 show2FAPasswordDialog(data.phone);
+            } else if (data.status === 'flood_wait') {
+                // Limite di tempo (FloodWait) di Telegram
+                console.log("FloodWait richiesto per", data.phone, "- Secondi:", data.wait_seconds);
+                
+                // Crea modal informativa
+                showFloodWaitModal(data.phone, data.message, data.wait_seconds);
             } else {
                 // Errore generico
                 showNotification('Errore', data.message || 'Errore durante l\'aggiunta dell\'utente', 'danger');
@@ -94,6 +100,90 @@ function addUser() {
         hideSpinner();
         console.error("Errore nell'aggiunta dell'utente:", e);
         showNotification('Errore', 'Si è verificato un errore durante l\'aggiunta dell\'utente', 'danger');
+    }
+}
+
+function showFloodWaitModal(phone, message, waitSeconds) {
+    try {
+        console.log("Mostrando modal FloodWait per:", phone);
+        
+        // Calcola data e ora quando sarà possibile riprovare
+        const retryTime = new Date(Date.now() + waitSeconds * 1000);
+        const formattedRetryTime = retryTime.toLocaleString();
+        
+        // Crea o trova la modal
+        let modalId = 'floodWaitModal';
+        let modal = document.getElementById(modalId);
+        
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = modalId;
+            modal.className = 'modal fade';
+            modal.setAttribute('tabindex', '-1');
+            modal.setAttribute('aria-labelledby', 'floodWaitModalLabel');
+            modal.setAttribute('aria-hidden', 'true');
+            
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="floodWaitModalLabel">Limite di tempo Telegram</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i> <strong>Attesa richiesta</strong>
+                            </div>
+                            <p id="floodWaitMessage">${message}</p>
+                            <p>Potrai richiedere un nuovo codice a partire da:<br>
+                            <strong id="floodWaitRetryTime">${formattedRetryTime}</strong></p>
+                            <p class="mt-3">Questo è un limite imposto da Telegram per prevenire abusi del sistema di autenticazione.</p>
+                            <hr>
+                            <p>Se hai già un account autenticato in precedenza, puoi provare ad usare quello invece di crearne uno nuovo.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        } else {
+            // Aggiorna contenuto se la modal esiste già
+            const messageElem = modal.querySelector('#floodWaitMessage');
+            const retryTimeElem = modal.querySelector('#floodWaitRetryTime');
+            
+            if (messageElem) messageElem.textContent = message;
+            if (retryTimeElem) retryTimeElem.textContent = formattedRetryTime;
+        }
+        
+        // Mostra la modal
+        try {
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            console.log("Modal FloodWait mostrata con bootstrap.Modal");
+        } catch (error) {
+            console.error("Errore nell'inizializzazione della modal Bootstrap:", error);
+            
+            // Fallback manuale
+            modal.classList.add('show');
+            modal.style.display = 'block';
+            document.body.classList.add('modal-open');
+            
+            // Crea backdrop manualmente
+            const backdropExists = document.querySelector('.modal-backdrop');
+            if (!backdropExists) {
+                const backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show';
+                document.body.appendChild(backdrop);
+            }
+            
+            console.log("Modal FloodWait mostrata manualmente");
+        }
+    } catch (e) {
+        console.error("Errore nella visualizzazione della modal FloodWait:", e);
+        showNotification('Errore', message || 'È necessario attendere prima di richiedere un nuovo codice di verifica', 'warning');
     }
 }
 
@@ -654,3 +744,4 @@ window.submitVerificationCode = submitVerificationCode;
 window.submitTwoFAPassword = submitTwoFAPassword;
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
+window.showFloodWaitModal = showFloodWaitModal;

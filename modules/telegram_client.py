@@ -7,6 +7,7 @@ from telethon.sessions import StringSession
 from pathlib import Path
 from dotenv import load_dotenv
 from modules.utils import setup_logger, save_to_json, load_from_json, ensure_directory
+from telethon.errors import SessionPasswordNeededError, FloodWaitError
 
 # Carica variabili d'ambiente
 load_dotenv()
@@ -89,6 +90,14 @@ class TelegramClientManager:
                 'phone': phone
             }
     
+    """
+Modifica da apportare al file modules/telegram_client.py per correggere il problema
+di autenticazione con il codice di verifica Telegram
+"""
+
+# Cerca la seguente funzione nel file modules/telegram_client.py
+# e sostituiscila con questa versione corretta:
+
     async def authenticate_client(self, phone, code=None, password=None, phone_code_hash=None):
         """Autentica un client Telegram con codice o password."""
         try:
@@ -120,6 +129,24 @@ class TelegramClientManager:
                         'message': 'Codice di verifica inviato',
                         'phone': phone,
                         'phone_code_hash': phone_code_hash
+                    }
+                except FloodWaitError as e:
+                    # Converti i secondi in formato più leggibile
+                    wait_minutes = e.seconds // 60
+                    wait_hours = wait_minutes // 60
+                    
+                    if wait_hours > 0:
+                        wait_message = f"Devi attendere {wait_hours} ore e {wait_minutes % 60} minuti prima di poter richiedere un altro codice"
+                    else:
+                        wait_message = f"Devi attendere {wait_minutes} minuti prima di poter richiedere un altro codice"
+                    
+                    logger.error(f"Limite di tempo per {phone}: {wait_message} (FloodWait di {e.seconds} secondi)")
+                    return {
+                        'success': False,
+                        'status': 'flood_wait',
+                        'message': wait_message,
+                        'wait_seconds': e.seconds,
+                        'phone': phone
                     }
                 except Exception as e:
                     logger.error(f"Errore nell'invio del codice per {phone}: {e}")
