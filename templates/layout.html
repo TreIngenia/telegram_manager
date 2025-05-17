@@ -192,6 +192,26 @@
     <!-- Socket.IO -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <!-- Custom JS -->
+    <!-- Moduli JavaScript dell'applicazione -->
+    <!-- Utilità e moduli di base -->
+    <script src="{{ url_for('static', filename='js/core-utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/socket-manager.js') }}"></script>
+
+    <!-- Gestione utenti e gruppi -->
+    <script src="{{ url_for('static', filename='js/user-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/group-manager.js') }}"></script>
+
+    <!-- Gestione funzionalità -->
+    <script src="{{ url_for('static', filename='js/monitor-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/download-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/archive-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/logs-manager.js') }}"></script>
+
+    <!-- Gestione pagine -->
+    <script src="{{ url_for('static', filename='js/dashboard-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/page-manager.js') }}"></script>
+
+    <!-- Script principale -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>

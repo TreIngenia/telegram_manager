@@ -28,9 +28,20 @@ function addUser() {
         const phoneInput = document.getElementById('newUserPhone');
         if (!phoneInput) return;
         
-        const phone = phoneInput.value.trim();
+        let phone = phoneInput.value.trim();
+        
+        // Verifica formato base
         if (!phone) {
             showNotification('Errore', 'Inserisci un numero di telefono valido', 'danger');
+            return;
+        }
+        
+        // Rimuovi eventuali caratteri "+" all'inizio e spazi
+        phone = phone.replace(/^\+/, '').replace(/\s/g, '');
+        
+        // Verifica che contenga solo cifre
+        if (!/^\d+$/.test(phone)) {
+            showNotification('Errore', 'Il numero di telefono deve contenere solo cifre', 'danger');
             return;
         }
         
@@ -43,10 +54,10 @@ function addUser() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ phone: `+${phone}` })
+            body: JSON.stringify({ phone: phone })
         })
-            .then(response => response.json())
-            .then(data => {
+        .then(response => response.json())
+        .then(data => {
                 // Nascondi spinner
                 hideSpinner();
                 
